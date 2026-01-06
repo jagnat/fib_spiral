@@ -10,21 +10,25 @@ final int numOuter = 34;
 final int numInner = 55;
 
 float[][] points = new float[numCells + numOuter + numInner][2];
+
 ArrayList<HashSet<Integer>> paraGroups = new ArrayList<>();
-MPolygon[] myRegions;
+MPolygon[] allRegions;
+ArrayList<MPolygon> usedRegions;
+
+Integer[] wiringIndices = {78, 57, 36, 15, 7, 28, 49, 70, 83, 62, 41, 20, 12, 33, 54, 75, 88, 67, 46, 25, 4, 17, 38, 59, 80, 72, 51, 30, 9, 1, 22, 43, 64, 85, 77, 56, 35, 14, 6, 27, 48, 69, 82, 61, 40, 19, 11, 32, 53, 74, 87, 66, 45, 24, 3, 16, 37, 58, 79, 71, 50, 29, 8, 0, 21, 42, 63, 84, 76, 55, 34, 13, 5, 26, 47, 68, 81, 60, 39, 18, 10, 31, 52, 73, 86, 65, 44, 23, 2};
 
 void setup()
 {
-  size(1200, 1200);
+  size(800, 800);
+  pixelDensity(2);
   background(0);
   //beginRecord(SVG, "output/output_"+timestamp()+".svg");
   stroke(0);
   strokeWeight(.5);
   noFill();
   translate(width/2, height/2);
-  
 
-  float outerRad = 580;
+  float outerRad = width / 2;
   //circle(width/2, height/2, outerRad * 2);
   final int total = numCells + numInner + numOuter;
   for (int i = 0; i < total; i++)
@@ -36,7 +40,7 @@ void setup()
     float dist = f * outerRad;
     //float dist = sqrt(f) * outerRad;
     
-    float x = cos(a * TWO_PI) * dist;
+    float x = -cos(a * TWO_PI) * dist;
     float y = sin(a * TWO_PI) * dist;
     
     points[i][0] = x;
@@ -59,7 +63,8 @@ void setup()
   //  line(edges[i][0], edges[i][1], edges[i][2], edges[i][3]);
   //}
   
-  myRegions = test.getRegions();
+  allRegions = test.getRegions();
+  usedRegions = new ArrayList<MPolygon>();
   JSONArray allCells = new JSONArray();
   
   // Generate parastichy groupings
@@ -92,14 +97,14 @@ void setup()
   
   findOptimalStartingSeed();
   
-  //line(0, -1200, 0, 1200);
-  //line(-1200,0, 1200, 0);
+  line(0, -1200, 0, 1200);
+  line(-1200,0, 1200, 0);
 
   //for(int i=numInner; i<numInner + numCells; i++)
   for(int i=0; i < numInner + numCells + numOuter; i++)
   {
     
-    float[][] regionCoordinates = myRegions[i].getCoords();
+    float[][] regionCoordinates = allRegions[i].getCoords();
     //int r = int(random(155) + 100);
     //int g = int(random(155) + 100);
     //int b = int(random(155) + 100);
@@ -112,6 +117,8 @@ void setup()
       stroke(0, 255, 0, 100);
       continue;
     }
+
+    // usedRegions.add(allRegions[i]);
     
     JSONObject cellData = new JSONObject();
     float cx = points[i][0];
@@ -123,7 +130,7 @@ void setup()
     float nextX = points[i + 21][0];
     float nextY = points[i + 21][1];
     float angle = atan2(nextY - cy, nextX - cx);
-  cellData.setFloat("ledAngle", angle);
+    cellData.setFloat("ledAngle", angle);
     
     //stroke(255, 255, 255, 255);
     //stroke(255, 255, 255, 255);
@@ -151,7 +158,9 @@ void setup()
       point(cx, cy);
       strokeWeight(1);
       stroke(255);
-      //text("" + (i - numInner), cx, cy);
+      int wireIdx = Arrays.asList(wiringIndices).indexOf(i - numInner);
+      // text("" + (i - numInner), cx, cy);
+      text("" + wireIdx, cx, cy);
     }
     
     cellData.setJSONArray("vertices", vertices);
@@ -165,13 +174,77 @@ void setup()
     cellData.setInt("quadrant", quadrant);
     allCells.append(cellData);
 
-    //myRegions[i].draw(this); // draw this shape
+    //allRegions[i].draw(this); // draw this shape
     //break;
   }
+
+  setupUsedRegions();
   
-  saveJSONArray(allCells, "data/voronoi_cells_" + timestamp() + ".json");
+  // saveJSONArray(allCells, "data/voronoi_cells_" + timestamp() + ".json");
   
   //endRecord();
+}
+
+void setupUsedRegions() {
+  int count = 0;
+  int parastichy = 8;
+  int dir = 1;
+  while (count < numCells) {
+    if (dir == 1) {
+      for (int i = 0; i < 7; i++) {
+        if (i * 21 + parastichy >= numCells) { break; }
+        count += 1;
+        int idx = i * 21 + parastichy;
+        println("idx: " + idx);
+        usedRegions.add(allRegions[idx + numInner]);
+      }
+    } else {
+      for (int i = 6; i >= 0; i--) {
+        if (i * 21 + parastichy >= numCells) { continue; }
+        count += 1;
+        int idx = i * 21 + parastichy;
+        println("idx: " + idx);
+        usedRegions.add(allRegions[idx + numInner]);
+      }
+    }
+    dir *= -1;
+    parastichy = (parastichy + 13) % 21;
+  }
+  // Collections.reverse(usedRegions);
+}
+
+void draw2()
+{
+  background(0);
+  translate(width/2, height/2);
+
+  stroke(0,0,0);
+  fill(255);
+  strokeWeight(3);
+
+  int time = millis() / 50;
+
+  int cell = time % usedRegions.size();
+
+  for (int i = 0; i < usedRegions.size(); i++)
+  {
+    MPolygon region = usedRegions.get(i);
+    // fill(color(random(255), random(255), random(255)));
+    float inter = i / (float)usedRegions.size();
+    fill(color(inter * 255, 0, (255 - inter) * 255));
+    // if (i == cell) {
+    //   fill(color(255, 255, 255));
+    // } else {
+    //   fill(color(100, 0, 0));
+    // }
+    float[][] coords = region.getCoords();
+    beginShape();
+    for (int p = 0; p < coords.length; p++) {
+      vertex(coords[p][0], coords[p][1]);
+    }
+    vertex(coords[0][0], coords[0][1]);
+    endShape();
+  }
 }
 
 String timestamp() 
@@ -223,7 +296,7 @@ int findOptimalStartingSeed() {
       
       for (int cellIdx : testGroups.get(g)) {
         int regionIdx = cellIdx + numInner;
-        float[][] coords = myRegions[regionIdx].getCoords();
+        float[][] coords = allRegions[regionIdx].getCoords();
         for (int v = 0; v < coords.length; v++) {
           minX = min(minX, coords[v][0]);
           maxX = max(maxX, coords[v][0]);
